@@ -4,8 +4,8 @@
 
 | Piece | Role |
 |---|---|
-| **agent** | Python CLI on the extract host: decrypt/extract MobileSync → local staging → **sync** to the server (`auto_sync: true` by default in `agent.yml`). Local viewer included. Shipped as `ark-agent-<ver>-windows-amd64.exe` on GitHub Releases. |
-| **server** | Node + Express + Eta + MySQL + Tabler UI, built on Tablerock. Shipped as `ghcr.io/<owner>/ark:<ver>`; consumers use `deploy/compose.yml` from the same release. |
+| **agent** | Python CLI on the extract host: decrypt/extract MobileSync → local staging → **sync** to the server (`auto_sync: true` by default in `agent.yml`). Stores originals; no transcoding required. Shipped as `ark-agent-<ver>-windows-amd64.exe` on GitHub Releases. |
+| **server** | Node + Express + Eta + MySQL + Tabler UI, built on Tablerock. Canonical browser viewer — on-demand media conversion (ffmpeg, etc.) lives here. Shipped as `ghcr.io/<owner>/ark:<ver>`; consumers use `deploy/compose.yml` from the same release. |
 | **data** | MySQL (metadata) + filesystem blobs under `ARK_DATA_DIR` (default `/data` in container) |
 
 <a id="tablerock"></a>
@@ -34,7 +34,9 @@ iPhone backups are incrementally updated “current device state” folders, not
 - Blobs: local filesystem under the data dir — no object store yet.
 - Host backup is an ops concern on the ark host, not product sync.
 
-The agent uses its own flags / future YAML config on the extract machine — not the server `.env`.
+The agent uses `agent.yml` / flags on the extract machine — not the server `.env`.
+
+`ark view` on the agent is a temporary local staging browser (inherited with the extractor). Product viewing and format conversion for the web UI are server responsibilities.
 
 ## Schema / migrations
 

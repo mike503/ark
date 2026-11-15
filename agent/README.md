@@ -46,8 +46,8 @@ cp agent.yml.example agent.yml   # edit url / api_key
 ark status
 ```
 
-Optional: `ffmpeg` on `PATH` for on-demand media conversion in the local viewer.
-
 ## Windows release
 
 GitHub Actions builds `ark-agent-<version>-windows-amd64.exe` and attaches `agent.yml.example` on the same release as the server compose assets.
+
+Browser-friendly media conversion (ffmpeg, etc.) belongs on the **server UI**, not the agent. The agent stores originals as extracted. `ark view` is only a local staging convenience and may degrade without ffmpeg for odd formats.
