@@ -1,0 +1,31 @@
+# Agent notes — ark
+
+## Product
+
+- Official name: **ark**.
+- Monorepo: Python **agent** (extract + local staging + sync) + **server** (API + UI).
+- Data: MySQL + filesystem blobs. Env **`ARK_DATA_DIR`**, container default `/data`, Docker `-v` from host.
+- Server stack uses **Tablerock** (internal, not-published-yet personal development framework) via path deps until it is published.
+
+## Conventions
+
+- Deploy: `compose.yml` BuildKit `additional_contexts: tablerock: ../tablerock`; server path deps `file:../../tablerock/packages/*`.
+- UTC datetimes; MySQL via `@tablerock/standard/db`.
+- Sync API must be batch/idempotent (upsert by id, blob by sha256). No per-message exists round-trips.
+- Secrets: API keys for agents; iTunes backup password stays on extract hosts only.
+- No DB migration files — apply schema with `.helpers/run-db-command.sh`, dump with a dump helper when added.
+- Prefer `.helpers/` for restart / DB; never hardcode DB credentials in shell.
+- **Git:** commit and push to `main` only (no feature branches / MRs unless the user asks).
+- Keep docs/README publicly presentable: no private hostnames, no other personal project names, no “today vs old tool” framing.
+
+## First milestones
+
+1. Scaffold `server/` Docker + `/data` volume + health endpoint + API-key stub.
+2. Minimal schema (runs, messages, blobs meta, overlays/soft-delete).
+3. Implement Python extract/staging in `agent/`; `ark sync` against local staging.
+4. Optional import path for older local archives.
+5. Windows packaging later — not blocking.
+
+## Context
+
+See [README.md](./README.md).

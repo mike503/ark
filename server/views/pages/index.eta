@@ -1,0 +1,16 @@
+        <div class="page-header d-print-none">
+          <div class="container-xl">
+            <div class="row g-2 align-items-center">
+              <div class="col">
+                <h2 class="page-title">ark</h2>
+                <div class="text-muted mt-1">Personal archive — messages, contacts, media, and related life data.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="page-body">
+          <div class="container-xl">
+            <p class="text-secondary">Scaffold is up. Domain UI arrives with schema + sync.</p>
+            <p class="text-secondary mb-0">Data dir: <code><%= it.dataDir %></code></p>
+          </div>
+        </div>
