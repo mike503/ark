@@ -1,0 +1,38 @@
+# ark server — pull prebuilt image (no repo clone / no local build required)
+#
+# Usage:
+#   cp .env.example .env   # set DATABASE_*
+#   docker compose up -d
+#
+# Image is published to GHCR on each GitHub Release.
+# Replace the tag below if you pin a specific version.
+
+services:
+  ark:
+    image: ghcr.io/mike503/ark:latest
+    container_name: ark
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      APP_PORT: ${APP_PORT:-3010}
+      APP_NAME: ${APP_NAME:-ark}
+      ARK_DATA_DIR: ${ARK_DATA_DIR:-/data}
+      DATABASE_HOSTNAME: ${DOCKER_DATABASE_HOSTNAME:-localhost}
+      DATABASE_PORT: ${DATABASE_PORT:-3306}
+    volumes:
+      - ${ARK_DATA_HOST:-./data}:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:'+(process.env.APP_PORT||3010)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

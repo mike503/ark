@@ -1,23 +1,351 @@
-"""CLI stub. Extract / stage / sync land in later milestones."""
+#!/usr/bin/env python3
+"""CLI for ark agent: encrypted backup -> local staging archive (-> sync later)."""
 
 from __future__ import annotations
 
-import click
+import argparse
+import getpass
+import shutil
+import sys
+from pathlib import Path
 
-from ark import __version__
+from ark.archive import Archive
+from ark.backup_io import open_backup
+from ark.dates import utc_now_iso
+from ark.extractors import contacts as contacts_ex
+from ark.extractors import messages as messages_ex
+from ark.extractors import voicemail as voicemail_ex
+from ark.extractors import voicememos as voicememos_ex
+from ark.extractors import whatsapp as whatsapp_ex
+from ark.extractors import wifi as wifi_ex
+from ark.report import CategoryReport, RunReport
+from ark.versioning import SCHEMA_VERSION, __version__
+from ark.viewer import run_viewer
+
+_ROOT = Path(__file__).resolve().parents[2]
 
 
-@click.group()
-@click.version_option(__version__, prog_name="ark")
-def main() -> None:
-    """ark — personal archive agent."""
+def _cleanup_work(work_dir: Path) -> None:
+    if not work_dir.exists():
+        return
+    shutil.rmtree(work_dir, ignore_errors=True)
+    if work_dir.exists():
+        print(f"Warning: could not fully remove work dir: {work_dir}", file=sys.stderr)
+    else:
+        print(f"Cleaned work: {work_dir}")
 
 
-@main.command()
-def status() -> None:
-    """Show agent scaffold status."""
-    click.echo("ark agent scaffold — extract/stage/sync not wired yet")
+CORE_COMMANDS = (
+    "messages",
+    "voicemail",
+    "voicememos",
+    "contacts",
+    "whatsapp",
+    "wifi",
+)
+
+
+def resolve_password(args: argparse.Namespace) -> str:
+    if args.password:
+        return args.password
+    path = Path(args.password_file) if args.password_file else None
+    if path and path.is_file():
+        lines = [
+            ln.strip()
+            for ln in path.read_text(encoding="utf-8").splitlines()
+            if ln.strip() and not ln.strip().startswith("#")
+        ]
+        if not lines:
+            raise SystemExit(f"Password file empty: {path}")
+        return lines[0]
+    return getpass.getpass("Backup encryption password: ")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="ark",
+        description=(
+            "Extract messages, voicemail, voice memos, contacts, WhatsApp, and Wi-Fi "
+            "from an encrypted iPhone backup into an append-only local staging archive. "
+            "Statuses are honest: ok only when verified."
+        ),
+    )
+    p.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__} (schema {SCHEMA_VERSION})",
+    )
+    p.add_argument(
+        "--backup",
+        type=Path,
+        required=False,
+        default=None,
+        help="Path to encrypted MobileSync backup folder (required for extract commands)",
+    )
+    p.add_argument(
+        "--out",
+        type=Path,
+        default=_ROOT / "out",
+        help="Local staging archive root (archive/, messages/, …)",
+    )
+    p.add_argument(
+        "--work",
+        type=Path,
+        default=None,
+        help="Scratch decrypt dir (default: <out>/work). Removed after each run unless --keep-work.",
+    )
+    p.add_argument(
+        "--keep-work",
+        action="store_true",
+        help="Leave --work contents after the run (debug).",
+    )
+    p.add_argument(
+        "--diagnostic",
+        action="store_true",
+        help="Write human-readable JSON dumps under <out>/export/ (off by default).",
+    )
+    p.add_argument(
+        "--password-file",
+        type=Path,
+        default=None,
+        help="File containing the backup encryption password (first non-comment line)",
+    )
+    p.add_argument("--password", help="Backup encryption password (prefer --password-file)")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    for name in CORE_COMMANDS:
+        sub.add_parser(name)
+    sub.add_parser(
+        "all",
+        help="Run messages, voicemail, voicememos, contacts, whatsapp, wifi",
+    )
+    view = sub.add_parser("view", help="Open local web viewer for a staging archive")
+    view.add_argument(
+        "--root",
+        type=Path,
+        default=None,
+        help="Archive root (default: --out, or current directory)",
+    )
+    view.add_argument("--port", type=int, default=None, help="Override config.yml viewer.port")
+    view.add_argument("--host", default=None, help="Override config.yml viewer.host")
+    view.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Do not open the system browser",
+    )
+    sync = sub.add_parser(
+        "sync",
+        help="Upload local staging archive to the ark server (not implemented yet)",
+    )
+    sync.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help="Agent config YAML (ark.url / ark.api_key)",
+    )
+    sub.add_parser("status", help="Show agent version and readiness")
+    return p
+
+
+def run_extract(args: argparse.Namespace) -> int:
+    if args.backup is None:
+        raise SystemExit("--backup is required for extract commands")
+    if not args.backup.is_dir():
+        raise SystemExit(f"Backup not found: {args.backup}")
+
+    out: Path = args.out
+    work_dir: Path = args.work if args.work is not None else out / "work"
+    archive_path = out / "archive" / "archive.sqlite"
+    export_dir: Path | None = (out / "export") if args.diagnostic else None
+    blobs_dir = out / "blobs"
+    messages_dir = out / "messages"
+    for d in (blobs_dir, messages_dir, work_dir, archive_path.parent):
+        d.mkdir(parents=True, exist_ok=True)
+    if export_dir is not None:
+        export_dir.mkdir(parents=True, exist_ok=True)
+
+    passphrase = resolve_password(args)
+    print(f"Opening backup {args.backup.name} (key derivation may take 10-30s)...")
+    try:
+        backup = open_backup(args.backup, passphrase)
+    except ValueError as exc:
+        raise SystemExit(f"Password rejected / cannot decrypt: {exc}") from exc
+    print("Password OK.")
+
+    archive = Archive(archive_path)
+    started_at = utc_now_iso()
+    cmds = list(CORE_COMMANDS) if args.cmd == "all" else [args.cmd]
+    archive.set_meta("backup_id", args.backup.name)
+    archive.set_meta("last_run", started_at)
+    archive.set_meta("last_run_tool_version", __version__)
+    archive.set_meta("last_run_schema_version", str(SCHEMA_VERSION))
+    archive.set_meta("tool_version", __version__)
+    archive.set_meta("schema_version", str(SCHEMA_VERSION))
+    run_id = archive.begin_run(
+        started_at=started_at,
+        tool_version=__version__,
+        schema_version=SCHEMA_VERSION,
+        backup_id=args.backup.name,
+        commands=cmds,
+        diagnostic=bool(args.diagnostic),
+    )
+    try:
+        from ark.backup_meta import read_backup_info
+
+        info = read_backup_info(args.backup)
+        for key in (
+            "backup_finished_at",
+            "backup_started_at",
+            "snapshot_state",
+            "device_name",
+            "product_name",
+            "product_type",
+            "product_version",
+            "build_version",
+            "serial_number",
+            "phone_number",
+        ):
+            val = info.get(key)
+            if val is not None and val != "":
+                archive.set_meta(key, str(val))
+        archive.set_meta("is_full_backup", "1" if info.get("is_full_backup") else "0")
+    except Exception as exc:  # noqa: BLE001
+        print(f"Warning: could not read backup Info/Status.plist: {exc}")
+
+    print(f"Tool {__version__} · schema {SCHEMA_VERSION}")
+    report = RunReport(
+        started_at=started_at,
+        backup_id=args.backup.name,
+        tool_version=__version__,
+        schema_version=SCHEMA_VERSION,
+    )
+    exit_ok = False
+
+    try:
+        for cmd in cmds:
+            print(f"\n=== {cmd} ===")
+            try:
+                if cmd == "messages":
+                    r = messages_ex.extract_messages(
+                        backup,
+                        archive=archive,
+                        work=work_dir,
+                        export_dir=export_dir,
+                        messages_dir=messages_dir,
+                        backup_id=args.backup.name,
+                    )
+                elif cmd == "voicemail":
+                    r = voicemail_ex.extract_voicemail(
+                        backup,
+                        archive=archive,
+                        work=work_dir,
+                        export_dir=export_dir,
+                        blobs_dir=blobs_dir,
+                    )
+                elif cmd == "voicememos":
+                    r = voicememos_ex.extract_voicememos(
+                        backup,
+                        archive=archive,
+                        work=work_dir,
+                        export_dir=export_dir,
+                        blobs_dir=blobs_dir,
+                    )
+                elif cmd == "contacts":
+                    r = contacts_ex.extract_contacts(
+                        backup,
+                        archive=archive,
+                        work=work_dir,
+                        export_dir=export_dir,
+                    )
+                elif cmd == "whatsapp":
+                    r = whatsapp_ex.extract_whatsapp(
+                        backup,
+                        archive=archive,
+                        work=work_dir,
+                        export_dir=export_dir,
+                        blobs_dir=blobs_dir,
+                        backup_id=args.backup.name,
+                    )
+                elif cmd == "wifi":
+                    r = wifi_ex.extract_wifi(
+                        backup,
+                        archive=archive,
+                        work=work_dir,
+                        export_dir=export_dir,
+                    )
+                else:
+                    raise SystemExit(f"Unknown command {cmd}")
+            except Exception as exc:  # noqa: BLE001
+                r = CategoryReport(category=cmd, status="failed")
+                r.note(f"Unhandled error: {exc}")
+                print(f"ERROR: {exc}")
+            report.add(r)
+            print(
+                f"-> {r.category}: {r.status} "
+                f"(ok={r.items_ok} partial={r.items_partial} failed={r.items_failed})"
+            )
+            for note in r.notes:
+                print(f"   - {note}")
+
+        report.finished_at = utc_now_iso()
+        status = report.overall_status()
+        archive.set_meta("last_run_status", status)
+        archive.set_meta("last_run_finished", report.finished_at)
+        archive.finish_run(run_id, finished_at=report.finished_at, status=status)
+        archive.close()
+        print(f"\nOverall: {status}")
+        print(f"Archive: {archive_path}")
+        if export_dir is not None:
+            report_path = export_dir / "run_report.json"
+            report.write(report_path)
+            print(f"Export:  {export_dir}")
+            print(f"Report:  {report_path}")
+        exit_ok = status in {"ok", "partial"}
+    finally:
+        if not args.keep_work:
+            _cleanup_work(work_dir)
+
+    return 0 if exit_ok else 1
+
+
+def run_sync(args: argparse.Namespace) -> int:
+    print(
+        "ark sync is not implemented yet.\n"
+        "Local staging works today (extract commands). "
+        "Batch upload to the ark server lands with the sync API."
+    )
+    if args.config:
+        print(f"(config path noted: {args.config})")
+    return 2
+
+
+def run_status() -> int:
+    print(f"ark agent {__version__} (schema {SCHEMA_VERSION})")
+    print("extract: ready (messages, voicemail, voicememos, contacts, whatsapp, wifi, all)")
+    print("view:    ready (local staging viewer)")
+    print("sync:    not implemented yet")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if args.cmd == "status":
+        return run_status()
+    if args.cmd == "sync":
+        return run_sync(args)
+    if args.cmd == "view":
+        root = args.root or args.out
+        if args.root is None and Path.cwd().joinpath("archive", "archive.sqlite").is_file():
+            root = Path.cwd()
+        elif args.root is None and args.out == _ROOT / "out":
+            root = Path.cwd()
+        return run_viewer(
+            Path(root),
+            port=args.port,
+            host=args.host,
+            open_browser=not args.no_browser,
+        )
+    return run_extract(args)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

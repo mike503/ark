@@ -1,0 +1,8 @@
+# Example per-archive config (copy next to archive.sqlite’s parent folder)
+
+title: my-iphone
+
+viewer:
+  host: 127.0.0.1
+  port: 8765
+  db: archive/archive.sqlite

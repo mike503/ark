@@ -16,62 +16,60 @@ The intended loop is deliberately boring. Plug the phone in, click run. ark trig
 
 ## Status
 
-Early scaffold. The **server** boots (health check, login stub, agent API-key stub). The **agent** (extract → stage → sync) is not wired yet. Windows one-click / `.exe` packaging comes later.
+- **Agent:** extract + local staging archive + local viewer work today. `ark sync` to the server is not implemented yet.
+- **Server:** boots (health, login stub, agent API-key stub). Domain sync API / schema still early.
+- **Releases:** GitHub Release = GHCR server image + Windows agent `.exe` + `compose.yml` / `.env.example` (aligned versions). See [docs/releasing.md](docs/releasing.md).
 
 ## Layout
 
 ```
 ark/
-  agent/       # Python CLI (extract, local staging, sync) — future Windows release
-  server/      # API + web UI (Docker)
-  compose.yml  # server deploy
-  docs/        # architecture, sync protocol, deeper design
-  .helpers/    # local restart + DB helpers
+  agent/       # Python CLI — extract, local staging, viewer (Windows .exe in releases)
+  server/      # API + web UI (GHCR image in releases)
+  deploy/      # Consumer compose + env (also attached to releases)
+  compose.yml  # Dev compose (builds from ./server + local Tablerock)
+  docs/
+  .helpers/
 ```
 
 ## Usage
 
-### Server
+### Server (from a release — no clone)
 
-Requirements: Docker, a MySQL/MariaDB database, and a local [Tablerock](docs/architecture.md#tablerock) checkout at `../tablerock` (until Tablerock is published).
+1. Download `compose.yml` and `.env.example` from the [GitHub Release](https://github.com/mike503/ark/releases).
+2. `cp .env.example .env` and set `DATABASE_*`.
+3. Create the MySQL database/user; apply schema from the repo (`server/db/schema.sql`) once.
+4. `docker compose up -d` (pulls `ghcr.io/mike503/ark:<version>`).
+5. `curl -s localhost:3010/api/health`
+
+### Server (from this repo — development)
+
+Requires a local [Tablerock](docs/architecture.md#tablerock) checkout at `../tablerock`.
 
 ```sh
-cp .env.example .env          # set DATABASE_* (and optional ARK_API_KEY)
-# create MySQL database/user matching .env, then:
+cp .env.example .env
 cat server/db/schema.sql | .helpers/run-db-command.sh
 cd server && npm install && cd ..
 docker compose up -d --build
-curl -s localhost:3010/api/health
 ```
-
-Create a UI admin (from `server/`):
-
-```sh
-npm run create-admin -- you@example.com 'your-password'
-```
-
-Optional agent API key (prints plaintext once):
-
-```sh
-npm run create-api-key -- laptop
-# or set ARK_API_KEY in .env for a bootstrap key
-```
-
-Session cookie signing uses a `session_secret` row in the `options` table (created automatically on first boot). Database credentials and ports stay in `.env`.
 
 ### Agent
 
-Not ready yet. Planned config:
-
-```yaml
-ark:
-  url: https://ark.example.com
-  api_key: "…"    # or env ARK_API_KEY
+```sh
+cd agent && python -m venv .venv && source .venv/bin/activate
+pip install -e .
+ark status
+ark --backup /path/to/MobileSync/Backup/<udid> --out ./staging all
+ark view --root ./staging
 ```
 
-The iPhone backup encryption password never leaves the machine that runs the agent.
+Windows: use the release `ark-agent-<version>-windows-amd64.exe` with the same flags.
+
+Password: `--password-file`, `--password`, or prompt. Never sent to the server.
 
 ## Docs
 
-- [Architecture](docs/architecture.md) — components, sync model, auth, deploy notes
-- [Sync protocol](docs/sync-protocol.md) — batch/idempotent sync (draft)
+- [Architecture](docs/architecture.md)
+- [Sync protocol](docs/sync-protocol.md) (draft)
+- [Data model](docs/DATA_MODEL.md) (local staging archive)
+- [Releasing](docs/releasing.md) (GHCR, Windows exe, Tablerock CI secrets)

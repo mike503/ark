@@ -22,9 +22,9 @@
 
 1. Scaffold `server/` Docker + `/data` volume + health endpoint + API-key stub.
 2. Minimal schema (runs, messages, blobs meta, overlays/soft-delete).
-3. Implement Python extract/staging in `agent/`; `ark sync` against local staging.
+3. Agent extract/staging/viewer ported; implement `ark sync` against local staging + server sync API.
 4. Optional import path for older local archives.
-5. Windows packaging later — not blocking.
+5. Release pipeline: GHCR image + Windows exe + deploy compose (see docs/releasing.md).
 
 ## Context
 

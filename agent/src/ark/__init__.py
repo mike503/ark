@@ -1,3 +1,5 @@
-"""ark agent — extract, stage locally, sync to the ark server."""
+"""ark agent — extract from encrypted iPhone backup, local staging, sync to server."""
 
-__version__ = "0.1.0"
+from .versioning import SCHEMA_VERSION, __version__
+
+__all__ = ["SCHEMA_VERSION", "__version__"]

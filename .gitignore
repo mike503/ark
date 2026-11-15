@@ -27,3 +27,8 @@ data/blobs/*
 logs/
 *.sqlite
 *.sqlite3
+iphone-archiver/
+agent/out/
+agent/dist/
+agent/build/
+*.spec.bak

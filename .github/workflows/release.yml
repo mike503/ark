@@ -1,0 +1,157 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag to build (e.g. v0.1.0). Leave empty to use the ref name."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      tag: ${{ steps.ver.outputs.tag }}
+    steps:
+      - id: ver
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          case "$TAG" in
+            v*) VERSION="${TAG#v}" ;;
+            *) VERSION="$TAG" ;;
+          esac
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  server-image:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ark
+        uses: actions/checkout@v4
+
+      - name: Checkout Tablerock (private companion)
+        env:
+          TABLEROCK_GIT_URL: ${{ secrets.TABLEROCK_GIT_URL }}
+          TABLEROCK_GIT_TOKEN: ${{ secrets.TABLEROCK_GIT_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TABLEROCK_GIT_URL:-}" ] || [ -z "${TABLEROCK_GIT_TOKEN:-}" ]; then
+            echo "::error::Set repository secrets TABLEROCK_GIT_URL and TABLEROCK_GIT_TOKEN"
+            echo "Tablerock is internal/unpublished; CI clones it privately into the build context."
+            echo "Example URL: https://gitlab.com/mike503/tablerock.git"
+            echo "Token: a GitLab/GitHub PAT or deploy token with read_repository."
+            exit 1
+          fi
+          # Support https://host/path.git — inject oauth2:TOKEN@
+          url="$TABLEROCK_GIT_URL"
+          if [[ "$url" == https://* ]]; then
+            url="https://oauth2:${TABLEROCK_GIT_TOKEN}@${url#https://}"
+          fi
+          git clone --depth 1 "$url" "$GITHUB_WORKSPACE/tablerock"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./server
+          file: ./server/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          build-contexts: |
+            tablerock=${{ github.workspace }}/tablerock
+
+  windows-agent:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install and build exe
+        working-directory: agent
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[build]"
+          pyinstaller --clean -y ark.spec
+          $ver = "${{ needs.version.outputs.version }}"
+          $src = "dist\ark-agent.exe"
+          $dst = "dist\ark-agent-$ver-windows-amd64.exe"
+          Move-Item -Force $src $dst
+          Get-Item $dst
+
+      - name: Upload agent artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ark-agent-windows
+          path: agent/dist/ark-agent-*-windows-amd64.exe
+
+  release:
+    needs: [version, server-image, windows-agent]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Windows agent
+        uses: actions/download-artifact@v4
+        with:
+          name: ark-agent-windows
+          path: release-assets
+
+      - name: Stage deploy assets
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          # Pin compose image tag to this release version
+          sed "s|ghcr.io/mike503/ark:latest|ghcr.io/${{ github.repository }}:${VERSION}|" \
+            deploy/compose.yml > release-assets/compose.yml
+          cp deploy/.env.example release-assets/.env.example
+          cp agent/config.example.yml release-assets/ark-agent.config.example.yml
+          cp server/db/schema.sql release-assets/schema.sql
+          ls -la release-assets
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: ark ${{ needs.version.outputs.version }}
+          generate_release_notes: true
+          files: |
+            release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
