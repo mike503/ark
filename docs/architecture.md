@@ -4,7 +4,7 @@
 
 | Piece | Role |
 |---|---|
-| **agent** | Python CLI on the extract host: decrypt/extract MobileSync → local staging archive (+ local viewer). Batch `ark sync` to the server is next. Shipped as `ark-agent-<ver>-windows-amd64.exe` on GitHub Releases. |
+| **agent** | Python CLI on the extract host: decrypt/extract MobileSync → local staging → **sync** to the server (`auto_sync: true` by default in `agent.yml`). Local viewer included. Shipped as `ark-agent-<ver>-windows-amd64.exe` on GitHub Releases. |
 | **server** | Node + Express + Eta + MySQL + Tabler UI, built on Tablerock. Shipped as `ghcr.io/<owner>/ark:<ver>`; consumers use `deploy/compose.yml` from the same release. |
 | **data** | MySQL (metadata) + filesystem blobs under `ARK_DATA_DIR` (default `/data` in container) |
 
@@ -15,7 +15,7 @@
 
 1. Agent runs wherever the MobileSync backup and encryption password exist.
 2. Extract → **local staging** (fast on-disk upserts).
-3. **Queue/sync** to ark: batch upsert by stable ids + blob sha256 checks + checkpoint — not one API call per message.
+3. **Sync** to ark immediately after extract when `auto_sync: true` (default): batch upsert by stable ids + blob sha256 + checkpoint — not one API call per message. `ark sync` alone re-runs upload; `--no-sync` skips it.
 4. Ark MySQL + `/data/blobs` = database of record.
 5. Soft-deletes and retained history live in ark; disaster recovery is backing up the server host.
 

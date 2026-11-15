@@ -8,8 +8,8 @@ One GitHub Release ships **aligned** server + agent artifacts:
 | `compose.yml` | Pulls that image (no clone / no build) |
 | `.env.example` | Server env template |
 | `schema.sql` | Baseline MySQL schema (apply once) |
-| `ark-agent-<version>-windows-amd64.exe` | Windows extract/stage agent |
-| `ark-agent.config.example.yml` | Optional local viewer config sample |
+| `ark-agent-<version>-windows-amd64.exe` | Windows extract/stage/sync agent |
+| `agent.yml.example` | Agent config (`url`, `api_key`, `auto_sync`) |
 
 ## Tag a release (manual version bump)
 

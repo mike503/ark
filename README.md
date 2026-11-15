@@ -16,7 +16,7 @@ The intended loop is deliberately boring. Plug the phone in, click run. ark trig
 
 ## Status
 
-- **Agent:** extract + local staging archive + local viewer work today. `ark sync` to the server is not implemented yet.
+- **Agent:** extract + local staging + local viewer work today. After extract, sync runs automatically when `auto_sync: true` (default); the sync API itself is not wired yet.
 - **Server:** boots (health, login stub, agent API-key stub). Domain sync API / schema still early.
 - **Releases:** GitHub Release = GHCR server image + Windows agent `.exe` + `compose.yml` / `.env.example` (aligned versions). See [docs/releasing.md](docs/releasing.md).
 
@@ -57,12 +57,14 @@ docker compose up -d --build  # migrates schema on boot
 ```sh
 cd agent && python -m venv .venv && source .venv/bin/activate
 pip install -e .
+cp agent.yml.example agent.yml   # url, api_key, auto_sync: true
 ark status
 ark --backup /path/to/MobileSync/Backup/<udid> --out ./staging all
+# → extract, then attempts sync (stub until server API lands)
 ark view --root ./staging
 ```
 
-Windows: use the release `ark-agent-<version>-windows-amd64.exe` with the same flags.
+Windows: release `ark-agent-<version>-windows-amd64.exe` + `agent.yml.example`.
 
 Password: `--password-file`, `--password`, or prompt. Never sent to the server.
 

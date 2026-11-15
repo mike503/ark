@@ -141,7 +141,7 @@ jobs:
           sed "s|ghcr.io/mike503/ark:latest|ghcr.io/${{ github.repository }}:${VERSION}|" \
             deploy/compose.yml > release-assets/compose.yml
           cp deploy/.env.example release-assets/.env.example
-          cp agent/config.example.yml release-assets/ark-agent.config.example.yml
+          cp agent/agent.yml.example release-assets/agent.yml.example
           cp server/db/schema.sql release-assets/schema.sql
           ls -la release-assets
 

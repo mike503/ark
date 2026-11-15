@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI for ark agent: encrypted backup -> local staging archive (-> sync later)."""
+"""CLI for ark agent: encrypted backup -> local staging -> sync to server."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import shutil
 import sys
 from pathlib import Path
 
+from ark.agent_config import load_agent_config
 from ark.archive import Archive
 from ark.backup_io import open_backup
 from ark.dates import utc_now_iso
@@ -19,6 +20,7 @@ from ark.extractors import voicememos as voicememos_ex
 from ark.extractors import whatsapp as whatsapp_ex
 from ark.extractors import wifi as wifi_ex
 from ark.report import CategoryReport, RunReport
+from ark.sync import sync_staging
 from ark.versioning import SCHEMA_VERSION, __version__
 from ark.viewer import run_viewer
 
@@ -65,15 +67,20 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="ark",
         description=(
-            "Extract messages, voicemail, voice memos, contacts, WhatsApp, and Wi-Fi "
-            "from an encrypted iPhone backup into an append-only local staging archive. "
-            "Statuses are honest: ok only when verified."
+            "Extract from an encrypted iPhone backup into a local staging archive, "
+            "then sync to the ark server (auto_sync: true by default in agent.yml)."
         ),
     )
     p.add_argument(
         "--version",
         action="version",
         version=f"%(prog)s {__version__} (schema {SCHEMA_VERSION})",
+    )
+    p.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help="Path to agent.yml (default: ./agent.yml)",
     )
     p.add_argument(
         "--backup",
@@ -85,8 +92,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--out",
         type=Path,
-        default=_ROOT / "out",
-        help="Local staging archive root (archive/, messages/, …)",
+        default=None,
+        help="Local staging archive root (default: agent.yml out, else ./out)",
     )
     p.add_argument(
         "--work",
@@ -111,12 +118,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="File containing the backup encryption password (first non-comment line)",
     )
     p.add_argument("--password", help="Backup encryption password (prefer --password-file)")
+    sync_group = p.add_mutually_exclusive_group()
+    sync_group.add_argument(
+        "--sync",
+        dest="sync_override",
+        action="store_true",
+        default=None,
+        help="After extract, sync even if agent.yml has auto_sync: false",
+    )
+    sync_group.add_argument(
+        "--no-sync",
+        dest="sync_override",
+        action="store_false",
+        help="Skip sync after extract even if auto_sync: true",
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
     for name in CORE_COMMANDS:
         sub.add_parser(name)
     sub.add_parser(
         "all",
-        help="Run messages, voicemail, voicememos, contacts, whatsapp, wifi",
+        help="Run messages, voicemail, voicememos, contacts, whatsapp, wifi; then sync if enabled",
     )
     view = sub.add_parser("view", help="Open local web viewer for a staging archive")
     view.add_argument(
@@ -132,27 +153,34 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Do not open the system browser",
     )
-    sync = sub.add_parser(
+    sub.add_parser(
         "sync",
-        help="Upload local staging archive to the ark server (not implemented yet)",
-    )
-    sync.add_argument(
-        "--config",
-        type=Path,
-        default=None,
-        help="Agent config YAML (ark.url / ark.api_key)",
+        help="Upload local staging archive to the ark server (without extracting)",
     )
     sub.add_parser("status", help="Show agent version and readiness")
     return p
 
 
-def run_extract(args: argparse.Namespace) -> int:
-    if args.backup is None:
-        raise SystemExit("--backup is required for extract commands")
-    if not args.backup.is_dir():
-        raise SystemExit(f"Backup not found: {args.backup}")
+def _resolve_paths(args: argparse.Namespace, agent_cfg: dict) -> tuple[Path | None, Path]:
+    backup = args.backup or agent_cfg.get("backup")
+    out = args.out or agent_cfg.get("out") or (_ROOT / "out")
+    return backup, Path(out)
 
-    out: Path = args.out
+
+def _want_sync(args: argparse.Namespace, agent_cfg: dict) -> bool:
+    if args.sync_override is not None:
+        return bool(args.sync_override)
+    return bool(agent_cfg.get("auto_sync", True))
+
+
+def run_extract(args: argparse.Namespace, agent_cfg: dict) -> int:
+    backup, out = _resolve_paths(args, agent_cfg)
+    if backup is None:
+        raise SystemExit("--backup is required (or set backup: in agent.yml)")
+    backup = Path(backup)
+    if not backup.is_dir():
+        raise SystemExit(f"Backup not found: {backup}")
+
     work_dir: Path = args.work if args.work is not None else out / "work"
     archive_path = out / "archive" / "archive.sqlite"
     export_dir: Path | None = (out / "export") if args.diagnostic else None
@@ -164,9 +192,9 @@ def run_extract(args: argparse.Namespace) -> int:
         export_dir.mkdir(parents=True, exist_ok=True)
 
     passphrase = resolve_password(args)
-    print(f"Opening backup {args.backup.name} (key derivation may take 10-30s)...")
+    print(f"Opening backup {backup.name} (key derivation may take 10-30s)...")
     try:
-        backup = open_backup(args.backup, passphrase)
+        backup_obj = open_backup(backup, passphrase)
     except ValueError as exc:
         raise SystemExit(f"Password rejected / cannot decrypt: {exc}") from exc
     print("Password OK.")
@@ -174,7 +202,7 @@ def run_extract(args: argparse.Namespace) -> int:
     archive = Archive(archive_path)
     started_at = utc_now_iso()
     cmds = list(CORE_COMMANDS) if args.cmd == "all" else [args.cmd]
-    archive.set_meta("backup_id", args.backup.name)
+    archive.set_meta("backup_id", backup.name)
     archive.set_meta("last_run", started_at)
     archive.set_meta("last_run_tool_version", __version__)
     archive.set_meta("last_run_schema_version", str(SCHEMA_VERSION))
@@ -184,14 +212,14 @@ def run_extract(args: argparse.Namespace) -> int:
         started_at=started_at,
         tool_version=__version__,
         schema_version=SCHEMA_VERSION,
-        backup_id=args.backup.name,
+        backup_id=backup.name,
         commands=cmds,
         diagnostic=bool(args.diagnostic),
     )
     try:
         from ark.backup_meta import read_backup_info
 
-        info = read_backup_info(args.backup)
+        info = read_backup_info(backup)
         for key in (
             "backup_finished_at",
             "backup_started_at",
@@ -214,7 +242,7 @@ def run_extract(args: argparse.Namespace) -> int:
     print(f"Tool {__version__} · schema {SCHEMA_VERSION}")
     report = RunReport(
         started_at=started_at,
-        backup_id=args.backup.name,
+        backup_id=backup.name,
         tool_version=__version__,
         schema_version=SCHEMA_VERSION,
     )
@@ -226,16 +254,16 @@ def run_extract(args: argparse.Namespace) -> int:
             try:
                 if cmd == "messages":
                     r = messages_ex.extract_messages(
-                        backup,
+                        backup_obj,
                         archive=archive,
                         work=work_dir,
                         export_dir=export_dir,
                         messages_dir=messages_dir,
-                        backup_id=args.backup.name,
+                        backup_id=backup.name,
                     )
                 elif cmd == "voicemail":
                     r = voicemail_ex.extract_voicemail(
-                        backup,
+                        backup_obj,
                         archive=archive,
                         work=work_dir,
                         export_dir=export_dir,
@@ -243,7 +271,7 @@ def run_extract(args: argparse.Namespace) -> int:
                     )
                 elif cmd == "voicememos":
                     r = voicememos_ex.extract_voicememos(
-                        backup,
+                        backup_obj,
                         archive=archive,
                         work=work_dir,
                         export_dir=export_dir,
@@ -251,23 +279,23 @@ def run_extract(args: argparse.Namespace) -> int:
                     )
                 elif cmd == "contacts":
                     r = contacts_ex.extract_contacts(
-                        backup,
+                        backup_obj,
                         archive=archive,
                         work=work_dir,
                         export_dir=export_dir,
                     )
                 elif cmd == "whatsapp":
                     r = whatsapp_ex.extract_whatsapp(
-                        backup,
+                        backup_obj,
                         archive=archive,
                         work=work_dir,
                         export_dir=export_dir,
                         blobs_dir=blobs_dir,
-                        backup_id=args.backup.name,
+                        backup_id=backup.name,
                     )
                 elif cmd == "wifi":
                     r = wifi_ex.extract_wifi(
-                        backup,
+                        backup_obj,
                         archive=archive,
                         work=work_dir,
                         export_dir=export_dir,
@@ -304,39 +332,50 @@ def run_extract(args: argparse.Namespace) -> int:
         if not args.keep_work:
             _cleanup_work(work_dir)
 
-    return 0 if exit_ok else 1
+    if not exit_ok:
+        return 1
+
+    if _want_sync(args, agent_cfg):
+        sync_code = sync_staging(out, agent_cfg)
+        # Sync not-implemented (2) does not fail a successful extract.
+        if sync_code == 1:
+            return 1
+    else:
+        print("\nSkipping sync (auto_sync disabled; use --sync or ark sync).")
+
+    return 0
 
 
-def run_sync(args: argparse.Namespace) -> int:
-    print(
-        "ark sync is not implemented yet.\n"
-        "Local staging works today (extract commands). "
-        "Batch upload to the ark server lands with the sync API."
-    )
-    if args.config:
-        print(f"(config path noted: {args.config})")
-    return 2
+def run_sync(args: argparse.Namespace, agent_cfg: dict) -> int:
+    _backup, out = _resolve_paths(args, agent_cfg)
+    return sync_staging(out, agent_cfg)
 
 
-def run_status() -> int:
+def run_status(agent_cfg: dict) -> int:
     print(f"ark agent {__version__} (schema {SCHEMA_VERSION})")
     print("extract: ready (messages, voicemail, voicememos, contacts, whatsapp, wifi, all)")
     print("view:    ready (local staging viewer)")
-    print("sync:    not implemented yet")
+    print("sync:    stub (auto after extract when auto_sync: true; API not wired yet)")
+    cfg_path = agent_cfg.get("path")
+    print(f"config:  {cfg_path if cfg_path else '(none — using defaults / env)'}")
+    print(f"auto_sync: {agent_cfg.get('auto_sync', True)}")
+    print(f"server:  {agent_cfg.get('url') or '(not set)'}")
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    agent_cfg = load_agent_config(args.config)
     if args.cmd == "status":
-        return run_status()
+        return run_status(agent_cfg)
     if args.cmd == "sync":
-        return run_sync(args)
+        return run_sync(args, agent_cfg)
     if args.cmd == "view":
-        root = args.root or args.out
+        _backup, default_out = _resolve_paths(args, agent_cfg)
+        root = args.root or default_out
         if args.root is None and Path.cwd().joinpath("archive", "archive.sqlite").is_file():
             root = Path.cwd()
-        elif args.root is None and args.out == _ROOT / "out":
+        elif args.root is None and args.out is None and agent_cfg.get("out") is None:
             root = Path.cwd()
         return run_viewer(
             Path(root),
@@ -344,7 +383,7 @@ def main(argv: list[str] | None = None) -> int:
             host=args.host,
             open_browser=not args.no_browser,
         )
-    return run_extract(args)
+    return run_extract(args, agent_cfg)
 
 
 if __name__ == "__main__":

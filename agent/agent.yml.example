@@ -1,0 +1,19 @@
+# ark agent config — copy to agent.yml next to the exe (or pass --config)
+#
+# Extract writes a local staging archive, then (by default) syncs to the server.
+
+# Server connection (env ARK_URL / ARK_API_KEY also work)
+url: https://ark.example.com
+api_key: "…"
+
+# After a successful extract, push staging to the server immediately.
+auto_sync: true
+
+# Optional defaults (CLI flags still win)
+# backup: C:\Users\You\Apple\MobileSync\Backup\00008140-…
+# out: .\staging
+
+# Optional local viewer defaults (also overridable via staging/config.yml)
+# viewer:
+#   host: 127.0.0.1
+#   port: 8765
