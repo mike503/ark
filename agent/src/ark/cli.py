@@ -153,9 +153,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Do not open the system browser",
     )
-    sub.add_parser(
+    sync_p = sub.add_parser(
         "sync",
         help="Upload local staging archive to the ark server (without extracting)",
+    )
+    sync_p.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        dest="sync_out",
+        help="Staging archive root (same as global --out)",
     )
     sub.add_parser("status", help="Show agent version and readiness")
     return p
@@ -347,6 +354,8 @@ def run_extract(args: argparse.Namespace, agent_cfg: dict) -> int:
 
 
 def run_sync(args: argparse.Namespace, agent_cfg: dict) -> int:
+    if getattr(args, "sync_out", None) is not None and args.out is None:
+        args.out = args.sync_out
     _backup, out = _resolve_paths(args, agent_cfg)
     return sync_staging(out, agent_cfg)
 
