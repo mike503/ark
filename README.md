@@ -1,6 +1,8 @@
 # ark
 
-Personal iPhone archive — durable store of messages, contacts, media, and related life data.
+Opinionated personal iPhone archive — plug it in, back it up, keep it in useful formats forever.
+
+Durable store of messages, contacts, media, and related life data.
 
 ## Why?
 
@@ -12,70 +14,64 @@ That left a simple question: if the libraries exist to do what TouchCopy did, wh
 
 The intended loop is deliberately boring. Plug the phone in, click run. ark triggers the official local iPhone backup (required), then digs through that backup and files the pieces you care about into the right shapes and the right spots — an archive you own, not a black-box export.
 
-## Layout (monorepo)
+## Status
+
+Early scaffold. The **server** boots (health check, login stub, agent API-key stub). The **agent** (extract → stage → sync) is not wired yet. Windows one-click / `.exe` packaging comes later.
+
+## Layout
 
 ```
 ark/
-  agent/          # Python CLI — extract from iPhone backup, local staging, sync to ark
-  server/         # API + web UI
-  compose.yml     # Dockerized server; data on volume (/data)
-  docs/           # architecture, sync protocol
-  .helpers/       # restart + DB helpers
+  agent/       # Python CLI (extract, local staging, sync) — future Windows release
+  server/      # API + web UI (Docker)
+  compose.yml  # server deploy
+  docs/        # architecture, sync protocol, deeper design
+  .helpers/    # local restart + DB helpers
 ```
 
-### Quick start (server)
+## Usage
+
+### Server
+
+Requirements: Docker, a MySQL/MariaDB database, and a local [Tablerock](docs/architecture.md#tablerock) checkout at `../tablerock` (until Tablerock is published).
 
 ```sh
-cp .env.example .env   # set DATABASE_* and SESSION_SECRET
-# create MySQL database/user `ark`, then:
+cp .env.example .env          # set DATABASE_* (and optional ARK_API_KEY)
+# create MySQL database/user matching .env, then:
 cat server/db/schema.sql | .helpers/run-db-command.sh
 cd server && npm install && cd ..
 docker compose up -d --build
 curl -s localhost:3010/api/health
 ```
 
-Agent API key smoke: set `ARK_API_KEY` in `.env`, or `cd server && npm run create-api-key -- laptop`.
+Create a UI admin (from `server/`):
 
-## Architecture
+```sh
+npm run create-admin -- you@example.com 'your-password'
+```
 
-| Piece | Choice |
-|---|---|
-| Agent | Python (Windows exe later via PyInstaller one-dir + ffmpeg) |
-| Server | Tablerock + Express + Eta + MySQL + Tabler UI |
-| Deploy | Docker Compose; Tablerock via BuildKit `additional_contexts` (local path dep for now) |
-| Blobs | Local filesystem under the data dir — no object store yet |
-| Host backup | Ops concern on the machine that hosts ark (not part of product sync) |
-| Data dir | `ARK_DATA_DIR` (env), default **`/data`** in container; host bind-mounts elsewhere |
+Optional agent API key (prints plaintext once):
 
-**Tablerock** (internal, not-published-yet personal development framework) provides shared Node/Express/MySQL helpers used by the server. A public release of ark will need Tablerock published (or another install path for `@tablerock/*`). Until then, development expects a local checkout at `../tablerock`.
+```sh
+npm run create-api-key -- laptop
+# or set ARK_API_KEY in .env for a bootstrap key
+```
 
-### Sync model
+Session cookie signing uses a `session_secret` row in the `options` table (created automatically on first boot). Database credentials and ports stay in `.env`.
 
-1. Agent runs wherever the MobileSync backup and encryption password exist.
-2. Extract → **local staging** (fast on-disk upserts).
-3. **Queue/sync** to ark: batch upsert by stable ids + blob sha256 checks + checkpoint — not one API call per message.
-4. Ark MySQL + `/data/blobs` = database of record.
-5. Soft-deletes and retained history live in ark; disaster recovery is backing up the server host.
+### Agent
 
-iPhone backups are incrementally updated “current device state” folders, not point-in-time generations. History for kept data lives in ark (plus host backups), not in MobileSync.
-
-### Config (agent)
+Not ready yet. Planned config:
 
 ```yaml
 ark:
   url: https://ark.example.com
-  api_key: "…"                   # or env ARK_API_KEY
+  api_key: "…"    # or env ARK_API_KEY
 ```
 
-Backup encryption password never leaves the extract machine.
+The iPhone backup encryption password never leaves the machine that runs the agent.
 
-### Auth (server)
+## Docs
 
-- Humans: session / UI login
-- Agent: API key (bearer), hashed at rest
-
-## Non-goals (for now)
-
-- Object store backend
-- Rewriting the agent in Go/Rust
-- Multi-writer conflict fancy (last-write-wins on guid upsert is fine)
+- [Architecture](docs/architecture.md) — components, sync model, auth, deploy notes
+- [Sync protocol](docs/sync-protocol.md) — batch/idempotent sync (draft)

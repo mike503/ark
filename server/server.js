@@ -12,6 +12,7 @@ import { pool } from './libraries/db.js';
 import { getLocalStrategy, serializeUser, deserializeUser, autheliaMiddleware } from './libraries/auth.js';
 import { writeLog } from './libraries/common.js';
 import { ensureDataDirs, getDataDir } from './libraries/data-dir.js';
+import { resolveSessionSecret } from './libraries/session-secret.js';
 import authRouter from './routes/auth.js';
 import apiRouter from './routes/api.js';
 import pagesRouter from './routes/pages.js';
@@ -37,6 +38,9 @@ app.use('/js', express.static(join(__dirname, 'public/js')));
 app.use('/css', express.static(join(__dirname, 'public/css')));
 app.use('/vendor', express.static(join(__dirname, 'public/vendor')));
 
+await ensureDataDirs();
+const sessionSecret = await resolveSessionSecret();
+
 const MySQLStore = mysqlSessionFactory(session);
 const sessionStore = new MySQLStore({
   clearExpired: true,
@@ -59,7 +63,7 @@ app.use(cookieParser());
 
 app.use(session({
   store: sessionStore,
-  secret: process.env.SESSION_SECRET || 'ark-secret-change-me',
+  secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -120,8 +124,6 @@ app.use((req, res) => {
   }
   res.status(404).send('Page not found');
 });
-
-await ensureDataDirs();
 
 app.listen(port, () => {
   writeLog('INFO', `ark listening on port ${port}`);

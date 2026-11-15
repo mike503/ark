@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   UNIQUE KEY `email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Generic key/value store (e.g. session_secret is created on first boot if missing).
 CREATE TABLE IF NOT EXISTS `options` (
   `option_name` varchar(191) NOT NULL,
   `option_value` text DEFAULT NULL,
