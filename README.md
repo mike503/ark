@@ -6,6 +6,8 @@ Personal iPhone archive — durable store of messages, contacts, media, and rela
 
 For a decade-plus, TouchCopy was how I kept an unfurled copy of the useful bits of my phone — messages, contacts, media, and so on — in ordinary files I could browse and keep. Then it stopped working. No amount of fiddling would make it see the device again.
 
+Each TouchCopy run also dumped a full fresh export. That was fine until you wanted a living archive: something that grows over time instead of rewriting the world on every plug-in. Because ark unfurls the backup first, it can treat each kind of item on its own terms — append new messages, skip blobs it already has, update contacts in place — instead of blasting out another complete copy.
+
 That left a simple question: if the libraries exist to do what TouchCopy did, why not build something that stores everything in the formats I actually want, in places I control, and that I can keep appending to for years?
 
 The intended loop is deliberately boring. Plug the phone in, click run. ark triggers the official local iPhone backup (required), then digs through that backup and files the pieces you care about into the right shapes and the right spots — an archive you own, not a black-box export.
