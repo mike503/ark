@@ -11,7 +11,9 @@ One GitHub Release ships **aligned** server + agent artifacts:
 | `ark-agent-<version>-windows-amd64.exe` | Windows extract/stage agent |
 | `ark-agent.config.example.yml` | Optional local viewer config sample |
 
-## Tag a release
+## Tag a release (manual version bump)
+
+Versions are **not** auto-bumped. You choose the tag; the pipeline builds whatever you push:
 
 ```sh
 git tag v0.1.0
@@ -19,6 +21,8 @@ git push origin v0.1.0
 ```
 
 Or run the **Release** workflow manually (`workflow_dispatch`) with a tag like `v0.1.0`.
+
+Keep `agent/src/ark/versioning.py` `__version__` in sync when you care about the CLI `--version` string matching the GitHub tag (optional but nice).
 
 ## Tablerock and GHCR builds
 
@@ -44,11 +48,12 @@ Until one of those lands, the clone-via-secret approach is the pragmatic path fo
 ```sh
 # from the GitHub Release assets:
 cp .env.example .env   # edit DATABASE_*
-docker compose up -d
+# create empty MySQL database/user matching .env
+docker compose up -d   # schema migrates on boot
 curl -s localhost:3010/api/health
 ```
 
-Apply the release `schema.sql` once against your MySQL database before first useful boot.
+`schema.sql` is still attached to the release for reference; you do not need to apply it by hand.
 
 ## Consumer install (agent)
 

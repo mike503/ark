@@ -1,5 +1,7 @@
 #!/bin/bash
-# Execute SQL commands piped to this script
+# Execute SQL commands piped to this script (ad-hoc / debug).
+# Normal schema updates happen automatically on server boot — you usually
+# do not need this for migrations.
 #
 # Usage:
 #   echo "SELECT 1;" | .helpers/run-db-command.sh

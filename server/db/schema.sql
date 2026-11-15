@@ -1,6 +1,5 @@
--- ark minimal schema (milestone 1 scaffold + auth tables)
--- Domain tables (runs, messages, blobs meta, overlays) land in milestone 2.
--- Apply with: .helpers/run-db-command.sh < server/db/schema.sql
+-- ark baseline schema (applied automatically on server boot via libraries/migrate.js)
+-- Additive column changes: add ensure* helpers in migrate.js — do not rewrite history.
 -- UTC contract: store DATETIME in UTC; pool sets time_zone = '+00:00'.
 
 SET NAMES utf8mb4;

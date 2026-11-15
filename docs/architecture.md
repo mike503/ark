@@ -38,9 +38,11 @@ The agent uses its own flags / future YAML config on the extract machine — not
 
 ## Schema / migrations
 
-There is **no** automatic schema migrator on boot yet. Apply `server/db/schema.sql` with `.helpers/run-db-command.sh` (or equivalent). `express-mysql-session` creates the `sessions` table itself.
+**Server:** on every boot, `libraries/migrate.js` applies `db/schema.sql` (`CREATE TABLE IF NOT EXISTS`, etc.), then runs additive ensure helpers (`INFORMATION_SCHEMA` + `ALTER` when needed). Operators only create an empty database/user. `express-mysql-session` creates `sessions` itself. `session_secret` is written into `options` on first boot if missing.
 
-When the domain schema starts changing often, prefer blogs-style **idempotent ensure-on-boot** helpers (check `INFORMATION_SCHEMA`, `ALTER` if missing) rather than numbered migration files — see project `AGENTS.md`.
+**Agent (local SQLite staging):** opening an archive runs `CREATE TABLE IF NOT EXISTS` plus `Archive._migrate()` for new columns/indexes. `SCHEMA_VERSION` in `versioning.py` is stamped into `meta`; bump it when the layout contract changes.
+
+No numbered migration files on either side.
 
 ## Non-goals (for now)
 

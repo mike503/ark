@@ -38,19 +38,18 @@ ark/
 
 1. Download `compose.yml` and `.env.example` from the [GitHub Release](https://github.com/mike503/ark/releases).
 2. `cp .env.example .env` and set `DATABASE_*`.
-3. Create the MySQL database/user; apply schema from the repo (`server/db/schema.sql`) once.
+3. Create an empty MySQL database + user (grants to create/alter tables).
 4. `docker compose up -d` (pulls `ghcr.io/mike503/ark:<version>`).
-5. `curl -s localhost:3010/api/health`
+5. Schema is applied automatically on boot. `curl -s localhost:3010/api/health`
 
 ### Server (from this repo — development)
 
 Requires a local [Tablerock](docs/architecture.md#tablerock) checkout at `../tablerock`.
 
 ```sh
-cp .env.example .env
-cat server/db/schema.sql | .helpers/run-db-command.sh
+cp .env.example .env          # set DATABASE_*
 cd server && npm install && cd ..
-docker compose up -d --build
+docker compose up -d --build  # migrates schema on boot
 ```
 
 ### Agent

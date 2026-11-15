@@ -12,6 +12,7 @@ import { pool } from './libraries/db.js';
 import { getLocalStrategy, serializeUser, deserializeUser, autheliaMiddleware } from './libraries/auth.js';
 import { writeLog } from './libraries/common.js';
 import { ensureDataDirs, getDataDir } from './libraries/data-dir.js';
+import { runMigrations } from './libraries/migrate.js';
 import { resolveSessionSecret } from './libraries/session-secret.js';
 import authRouter from './routes/auth.js';
 import apiRouter from './routes/api.js';
@@ -39,6 +40,7 @@ app.use('/css', express.static(join(__dirname, 'public/css')));
 app.use('/vendor', express.static(join(__dirname, 'public/vendor')));
 
 await ensureDataDirs();
+await runMigrations();
 const sessionSecret = await resolveSessionSecret();
 
 const MySQLStore = mysqlSessionFactory(session);

@@ -13,7 +13,8 @@
 - UTC datetimes; MySQL via `@tablerock/standard/db`.
 - Sync API must be batch/idempotent (upsert by id, blob by sha256). No per-message exists round-trips.
 - Secrets: API keys for agents; iTunes backup password stays on extract hosts only. UI `session_secret` lives in `options` (auto-generated on boot) — not `.env`.
-- No numbered DB migration files — apply baseline with `.helpers/run-db-command.sh`; prefer idempotent ensure-on-boot helpers when schema evolves. Dump helper when added.
+- **Server schema auto-migrates on boot** (`libraries/migrate.js` runs `db/schema.sql` CREATE IF NOT EXISTS, then additive ensure* helpers). No numbered migration files; no manual schema step for operators.
+- Agent SQLite staging also auto-migrates on open (`Archive._migrate`).
 - Prefer `.helpers/` for restart / DB; never hardcode DB credentials in shell.
 - **Git:** commit and push to `main` only (no feature branches / MRs unless the user asks).
 - Keep docs/README publicly presentable: no private hostnames, no other personal project names, no “today vs old tool” framing.
