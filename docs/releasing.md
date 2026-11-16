@@ -7,7 +7,7 @@ One GitHub Release ships **aligned** server + agent artifacts:
 | `ghcr.io/<owner>/ark:<version>` (+ `:latest`) | Server container image |
 | `compose.yml` | Pulls that image (no clone / no build) |
 | `.env.example` | Server env template |
-| `schema.sql` | Baseline MySQL schema (apply once) |
+| `schema.sql` | Baseline schema (reference; server also migrates on boot) |
 | `ark-agent-<version>-windows-amd64.exe` | Windows extract/stage/sync agent |
 | `agent.yml.example` | Agent config (`url`, `api_key`, `auto_sync`) |
 

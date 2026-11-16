@@ -29,4 +29,4 @@
 
 ## Context
 
-See [README.md](./README.md).
+See [README.md](./README.md) (product) and [docs/development.md](./docs/development.md) (clone/dev).
