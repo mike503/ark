@@ -38,7 +38,7 @@ def load_agent_config(explicit: Path | None = None) -> dict[str, Any]:
     """
     Resolved agent settings.
 
-    Keys: path, url, api_key, auto_sync, backup, out, password, password_file, raw
+    Keys: path, url, api_key, auto_sync, backup, out, password, raw
     """
     path = find_agent_config(explicit)
     raw = _load_yaml(path) if path else {}
@@ -67,7 +67,6 @@ def load_agent_config(explicit: Path | None = None) -> dict[str, Any]:
         or raw.get("password")
         or ark_block.get("password")
     )
-    password_file = raw.get("password_file") or ark_block.get("password_file")
 
     return {
         "path": path,
@@ -77,6 +76,5 @@ def load_agent_config(explicit: Path | None = None) -> dict[str, Any]:
         "backup": Path(backup) if backup else None,
         "out": Path(out) if out else None,
         "password": str(password) if password else None,
-        "password_file": Path(password_file) if password_file else None,
         "raw": raw,
     }

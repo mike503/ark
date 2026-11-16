@@ -234,4 +234,4 @@ ark --backup /path/to/MobileSync/Backup/<udid> --out ./staging messages
 ark --backup … voicemail|voicememos|contacts|wifi|whatsapp|all
 ```
 
-Password: `ARK_BACKUP_PASSWORD` or `agent.yml`, else prompt.
+Password: `ARK_BACKUP_PASSWORD` or `agent.yml` `password:`, else prompt.

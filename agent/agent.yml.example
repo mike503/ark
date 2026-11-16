@@ -15,7 +15,5 @@ auto_sync: true
 # out: .\staging
 
 # Backup encryption password (optional). Same sensitivity as api_key.
-# Prefer a dedicated machine + locked-down file permissions.
-# Env ARK_BACKUP_PASSWORD overrides password: below.
+# Env ARK_BACKUP_PASSWORD overrides this.
 # password: "…"
-# password_file: .\backup-password.txt

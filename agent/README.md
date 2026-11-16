@@ -22,12 +22,11 @@ url: https://ark.example.com
 api_key: "…"
 auto_sync: true
 # password: "…"          # optional; same sensitivity as api_key
-# password_file: .\pw.txt
 ```
 
 Env overrides: `ARK_URL`, `ARK_API_KEY`, `ARK_BACKUP_PASSWORD`.
 
-Backup password: `ARK_BACKUP_PASSWORD` or `agent.yml` (`password` / `password_file`), else interactive prompt. Never leaves this machine.
+Backup password: `ARK_BACKUP_PASSWORD` or `agent.yml` `password:`, else interactive prompt. Never leaves this machine.
 
 ## Commands
 

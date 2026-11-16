@@ -47,27 +47,10 @@ CORE_COMMANDS = (
 )
 
 
-def _password_from_file(path: Path) -> str:
-    lines = [
-        ln.strip()
-        for ln in path.read_text(encoding="utf-8").splitlines()
-        if ln.strip() and not ln.strip().startswith("#")
-    ]
-    if not lines:
-        raise SystemExit(f"Password file empty: {path}")
-    return lines[0]
-
-
 def resolve_password(agent_cfg: dict) -> str:
-    """ARK_BACKUP_PASSWORD / agent.yml > prompt. Never leaves this machine."""
+    """ARK_BACKUP_PASSWORD / agent.yml password > prompt. Never leaves this machine."""
     if agent_cfg.get("password"):
         return str(agent_cfg["password"])
-    cfg_file = agent_cfg.get("password_file")
-    if cfg_file:
-        path = Path(cfg_file)
-        if not path.is_file():
-            raise SystemExit(f"Password file not found (agent.yml): {path}")
-        return _password_from_file(path)
     return getpass.getpass("Backup encryption password: ")
 
 
@@ -355,12 +338,8 @@ def run_status(agent_cfg: dict) -> int:
     print(f"config:  {cfg_path if cfg_path else '(none — using defaults / env)'}")
     print(f"auto_sync: {agent_cfg.get('auto_sync', True)}")
     print(f"server:  {agent_cfg.get('url') or '(not set)'}")
-    has_pw = bool(
-        agent_cfg.get("password")
-        or agent_cfg.get("password_file")
-        or os.environ.get("ARK_BACKUP_PASSWORD")
-    )
-    print(f"backup password: {'set' if has_pw else '(agent.yml / ARK_BACKUP_PASSWORD / prompt)'}")
+    has_pw = bool(agent_cfg.get("password") or os.environ.get("ARK_BACKUP_PASSWORD"))
+    print(f"backup password: {'set' if has_pw else '(agent.yml password / ARK_BACKUP_PASSWORD / prompt)'}")
     return 0
 
 
