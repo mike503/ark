@@ -24,17 +24,17 @@ The intended loop is deliberately boring. Plug the phone in, click run. ark trig
 
 ```
 ark/
-  agent/       # Python CLI — extract, local staging, viewer (Windows .exe in releases)
+  agent/       # Python CLI — extract, local staging, viewer (packaged as a Windows .exe in releases)
   server/      # API + web UI (GHCR image in releases)
   deploy/      # Consumer compose + env (also attached to releases)
   compose.yml  # Dev compose (builds from ./server + local Tablerock)
   docs/
-  .helpers/
+  .helpers/    # helper scripts for agents
 ```
 
 ## Usage
 
-### Server (from a release — no clone)
+### Server
 
 1. Download `compose.yml` and `.env.example` from the [GitHub Release](https://github.com/mike503/ark/releases).
 2. `cp .env.example .env` and set `DATABASE_*`.
@@ -42,27 +42,7 @@ ark/
 4. `docker compose up -d` (pulls `ghcr.io/mike503/ark:<version>`).
 5. Schema is applied automatically on boot. `curl -s localhost:3010/api/health`
 
-### Server (from this repo — development)
-
-Requires a local [Tablerock](docs/architecture.md#tablerock) checkout at `../tablerock`.
-
-```sh
-cp .env.example .env          # set DATABASE_*
-cd server && npm install && cd ..
-docker compose up -d --build  # migrates schema on boot
-```
-
 ### Agent
-
-```sh
-cd agent && python -m venv .venv && source .venv/bin/activate
-pip install -e .
-cp agent.yml.example agent.yml   # url, api_key, auto_sync: true
-ark status
-ark --backup /path/to/MobileSync/Backup/<udid> --out ./staging all
-# → extract, then attempts sync (stub until server API lands)
-ark view --root ./staging
-```
 
 Windows: release `ark-agent-<version>-windows-amd64.exe` + `agent.yml.example`.
 
