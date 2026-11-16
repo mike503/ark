@@ -58,15 +58,8 @@ def _password_from_file(path: Path) -> str:
     return lines[0]
 
 
-def resolve_password(args: argparse.Namespace, agent_cfg: dict) -> str:
-    """CLI > agent.yml / env > prompt. Never leaves this machine."""
-    if args.password:
-        return args.password
-    if args.password_file:
-        path = Path(args.password_file)
-        if not path.is_file():
-            raise SystemExit(f"Password file not found: {path}")
-        return _password_from_file(path)
+def resolve_password(agent_cfg: dict) -> str:
+    """ARK_BACKUP_PASSWORD / agent.yml > prompt. Never leaves this machine."""
     if agent_cfg.get("password"):
         return str(agent_cfg["password"])
     cfg_file = agent_cfg.get("password_file")
@@ -125,16 +118,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--diagnostic",
         action="store_true",
         help="Write human-readable JSON dumps under <out>/export/ (off by default).",
-    )
-    p.add_argument(
-        "--password-file",
-        type=Path,
-        default=None,
-        help="File containing the backup encryption password (first non-comment line)",
-    )
-    p.add_argument(
-        "--password",
-        help="Backup encryption password (also: agent.yml password / ARK_BACKUP_PASSWORD)",
     )
     sync_group = p.add_mutually_exclusive_group()
     sync_group.add_argument(
@@ -202,7 +185,7 @@ def run_extract(args: argparse.Namespace, agent_cfg: dict) -> int:
     if export_dir is not None:
         export_dir.mkdir(parents=True, exist_ok=True)
 
-    passphrase = resolve_password(args, agent_cfg)
+    passphrase = resolve_password(agent_cfg)
     print(f"Opening backup {backup.name} (key derivation may take 10-30s)...")
     try:
         backup_obj = open_backup(backup, passphrase)
@@ -377,7 +360,7 @@ def run_status(agent_cfg: dict) -> int:
         or agent_cfg.get("password_file")
         or os.environ.get("ARK_BACKUP_PASSWORD")
     )
-    print(f"backup password: {'set' if has_pw else '(prompt / --password / --password-file)'}")
+    print(f"backup password: {'set' if has_pw else '(agent.yml / ARK_BACKUP_PASSWORD / prompt)'}")
     return 0
 
 

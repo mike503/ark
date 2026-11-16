@@ -27,7 +27,7 @@ auto_sync: true
 
 Env overrides: `ARK_URL`, `ARK_API_KEY`, `ARK_BACKUP_PASSWORD`.
 
-Password resolution order: `--password` → `--password-file` → `agent.yml` / env → interactive prompt. The backup password never leaves this machine.
+Backup password: `ARK_BACKUP_PASSWORD` or `agent.yml` (`password` / `password_file`), else interactive prompt. Never leaves this machine.
 
 ## Commands
 

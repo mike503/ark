@@ -16,6 +16,6 @@ auto_sync: true
 
 # Backup encryption password (optional). Same sensitivity as api_key.
 # Prefer a dedicated machine + locked-down file permissions.
-# CLI --password / --password-file and env ARK_BACKUP_PASSWORD also work.
+# Env ARK_BACKUP_PASSWORD overrides password: below.
 # password: "…"
 # password_file: .\backup-password.txt

@@ -51,7 +51,7 @@ ark --backup /path/to/MobileSync/Backup/<udid> --out ./staging all
 # → extract, then attempts sync (stub until server API lands)
 ```
 
-Backup password: `agent.yml` / `ARK_BACKUP_PASSWORD` / `--password-file` / `--password` / prompt. Never sent to the server.
+Backup password: `ARK_BACKUP_PASSWORD` or `agent.yml` (`password` / `password_file`), else prompt. Never sent to the server.
 
 More agent detail: [agent/README.md](../agent/README.md).
 
