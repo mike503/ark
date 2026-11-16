@@ -29,8 +29,8 @@ Download assets from the latest [GitHub Release](https://github.com/mike503/ark/
 ### Agent
 
 1. Grab `ark-agent-<version>-windows-amd64.exe` and `agent.yml.example`.
-2. Copy to `agent.yml`, set `url` / `api_key` (`auto_sync: true` by default).
-3. Run against your MobileSync backup folder (password via file, flag, or prompt — never sent to the server).
+2. Copy to `agent.yml`; set `url` / `api_key` (`auto_sync: true` by default). Optional: `password` or `password_file` for the backup (same sensitivity as the API key — keep the file private).
+3. Run against your MobileSync backup folder. Password never leaves the extract machine.
 
 After extract, the agent attempts sync automatically. The sync API is still early; extract/staging already work.
 

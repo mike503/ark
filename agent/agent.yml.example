@@ -1,6 +1,7 @@
 # ark agent config — copy to agent.yml next to the exe (or pass --config)
 #
-# Extract writes a local staging archive, then (by default) syncs to the server.
+# This file holds secrets (server API key, optional backup password).
+# Keep it private; do not commit it.
 
 # Server connection (env ARK_URL / ARK_API_KEY also work)
 url: https://ark.example.com
@@ -13,7 +14,8 @@ auto_sync: true
 # backup: C:\Users\You\Apple\MobileSync\Backup\00008140-…
 # out: .\staging
 
-# Optional local viewer defaults (also overridable via staging/config.yml)
-# viewer:
-#   host: 127.0.0.1
-#   port: 8765
+# Backup encryption password (optional). Same sensitivity as api_key.
+# Prefer a dedicated machine + locked-down file permissions.
+# CLI --password / --password-file and env ARK_BACKUP_PASSWORD also work.
+# password: "…"
+# password_file: .\backup-password.txt

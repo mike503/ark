@@ -1,4 +1,4 @@
-"""Load agent.yml (server URL, auto_sync, optional defaults)."""
+"""Load agent.yml (server URL, auto_sync, backup password, optional defaults)."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def load_agent_config(explicit: Path | None = None) -> dict[str, Any]:
     """
     Resolved agent settings.
 
-    Keys: path, url, api_key, auto_sync, backup, out, raw
+    Keys: path, url, api_key, auto_sync, backup, out, password, password_file, raw
     """
     path = find_agent_config(explicit)
     raw = _load_yaml(path) if path else {}
@@ -62,6 +62,13 @@ def load_agent_config(explicit: Path | None = None) -> dict[str, Any]:
     backup = raw.get("backup")
     out = raw.get("out")
 
+    password = (
+        os.environ.get("ARK_BACKUP_PASSWORD")
+        or raw.get("password")
+        or ark_block.get("password")
+    )
+    password_file = raw.get("password_file") or ark_block.get("password_file")
+
     return {
         "path": path,
         "url": str(url).rstrip("/") if url else None,
@@ -69,5 +76,7 @@ def load_agent_config(explicit: Path | None = None) -> dict[str, Any]:
         "auto_sync": auto_sync,
         "backup": Path(backup) if backup else None,
         "out": Path(out) if out else None,
+        "password": str(password) if password else None,
+        "password_file": Path(password_file) if password_file else None,
         "raw": raw,
     }

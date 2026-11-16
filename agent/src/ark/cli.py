@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -22,7 +23,6 @@ from ark.extractors import wifi as wifi_ex
 from ark.report import CategoryReport, RunReport
 from ark.sync import sync_staging
 from ark.versioning import SCHEMA_VERSION, __version__
-from ark.viewer import run_viewer
 
 _ROOT = Path(__file__).resolve().parents[2]
 
@@ -47,19 +47,34 @@ CORE_COMMANDS = (
 )
 
 
-def resolve_password(args: argparse.Namespace) -> str:
+def _password_from_file(path: Path) -> str:
+    lines = [
+        ln.strip()
+        for ln in path.read_text(encoding="utf-8").splitlines()
+        if ln.strip() and not ln.strip().startswith("#")
+    ]
+    if not lines:
+        raise SystemExit(f"Password file empty: {path}")
+    return lines[0]
+
+
+def resolve_password(args: argparse.Namespace, agent_cfg: dict) -> str:
+    """CLI > agent.yml / env > prompt. Never leaves this machine."""
     if args.password:
         return args.password
-    path = Path(args.password_file) if args.password_file else None
-    if path and path.is_file():
-        lines = [
-            ln.strip()
-            for ln in path.read_text(encoding="utf-8").splitlines()
-            if ln.strip() and not ln.strip().startswith("#")
-        ]
-        if not lines:
-            raise SystemExit(f"Password file empty: {path}")
-        return lines[0]
+    if args.password_file:
+        path = Path(args.password_file)
+        if not path.is_file():
+            raise SystemExit(f"Password file not found: {path}")
+        return _password_from_file(path)
+    if agent_cfg.get("password"):
+        return str(agent_cfg["password"])
+    cfg_file = agent_cfg.get("password_file")
+    if cfg_file:
+        path = Path(cfg_file)
+        if not path.is_file():
+            raise SystemExit(f"Password file not found (agent.yml): {path}")
+        return _password_from_file(path)
     return getpass.getpass("Backup encryption password: ")
 
 
@@ -117,7 +132,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="File containing the backup encryption password (first non-comment line)",
     )
-    p.add_argument("--password", help="Backup encryption password (prefer --password-file)")
+    p.add_argument(
+        "--password",
+        help="Backup encryption password (also: agent.yml password / ARK_BACKUP_PASSWORD)",
+    )
     sync_group = p.add_mutually_exclusive_group()
     sync_group.add_argument(
         "--sync",
@@ -138,20 +156,6 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "all",
         help="Run messages, voicemail, voicememos, contacts, whatsapp, wifi; then sync if enabled",
-    )
-    view = sub.add_parser("view", help="Open local web viewer for a staging archive")
-    view.add_argument(
-        "--root",
-        type=Path,
-        default=None,
-        help="Archive root (default: --out, or current directory)",
-    )
-    view.add_argument("--port", type=int, default=None, help="Override config.yml viewer.port")
-    view.add_argument("--host", default=None, help="Override config.yml viewer.host")
-    view.add_argument(
-        "--no-browser",
-        action="store_true",
-        help="Do not open the system browser",
     )
     sync_p = sub.add_parser(
         "sync",
@@ -198,7 +202,7 @@ def run_extract(args: argparse.Namespace, agent_cfg: dict) -> int:
     if export_dir is not None:
         export_dir.mkdir(parents=True, exist_ok=True)
 
-    passphrase = resolve_password(args)
+    passphrase = resolve_password(args, agent_cfg)
     print(f"Opening backup {backup.name} (key derivation may take 10-30s)...")
     try:
         backup_obj = open_backup(backup, passphrase)
@@ -363,12 +367,17 @@ def run_sync(args: argparse.Namespace, agent_cfg: dict) -> int:
 def run_status(agent_cfg: dict) -> int:
     print(f"ark agent {__version__} (schema {SCHEMA_VERSION})")
     print("extract: ready (messages, voicemail, voicememos, contacts, whatsapp, wifi, all)")
-    print("view:    ready (local staging viewer)")
     print("sync:    stub (auto after extract when auto_sync: true; API not wired yet)")
     cfg_path = agent_cfg.get("path")
     print(f"config:  {cfg_path if cfg_path else '(none — using defaults / env)'}")
     print(f"auto_sync: {agent_cfg.get('auto_sync', True)}")
     print(f"server:  {agent_cfg.get('url') or '(not set)'}")
+    has_pw = bool(
+        agent_cfg.get("password")
+        or agent_cfg.get("password_file")
+        or os.environ.get("ARK_BACKUP_PASSWORD")
+    )
+    print(f"backup password: {'set' if has_pw else '(prompt / --password / --password-file)'}")
     return 0
 
 
@@ -379,19 +388,6 @@ def main(argv: list[str] | None = None) -> int:
         return run_status(agent_cfg)
     if args.cmd == "sync":
         return run_sync(args, agent_cfg)
-    if args.cmd == "view":
-        _backup, default_out = _resolve_paths(args, agent_cfg)
-        root = args.root or default_out
-        if args.root is None and Path.cwd().joinpath("archive", "archive.sqlite").is_file():
-            root = Path.cwd()
-        elif args.root is None and args.out is None and agent_cfg.get("out") is None:
-            root = Path.cwd()
-        return run_viewer(
-            Path(root),
-            port=args.port,
-            host=args.host,
-            open_browser=not args.no_browser,
-        )
     return run_extract(args, agent_cfg)
 
 

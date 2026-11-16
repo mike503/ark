@@ -45,14 +45,13 @@ Helpers: `.helpers/restart-app-server.sh`, `.helpers/run-db-command.sh` (ad-hoc 
 ```sh
 cd agent && python -m venv .venv && source .venv/bin/activate
 pip install -e .
-cp agent.yml.example agent.yml   # url, api_key, auto_sync: true
+cp agent.yml.example agent.yml   # url, api_key, auto_sync; optional password
 ark status
 ark --backup /path/to/MobileSync/Backup/<udid> --out ./staging all
 # → extract, then attempts sync (stub until server API lands)
-ark view --root ./staging
 ```
 
-Password: `--password-file`, `--password`, or prompt. Never sent to the server.
+Backup password: `agent.yml` / `ARK_BACKUP_PASSWORD` / `--password-file` / `--password` / prompt. Never sent to the server.
 
 More agent detail: [agent/README.md](../agent/README.md).
 

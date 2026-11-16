@@ -223,7 +223,7 @@ Tables used for headless upsert (same logical records as JSON exports):
 - `whatsapp_messages` — key `id`
 - `meta` — run metadata
 
-Payload JSON for each row is stored in `payload_json` for round-tripping into a viewer or another DB.
+Payload JSON for each row is stored in `payload_json` for round-tripping into the server UI or another DB.
 
 ---
 
@@ -232,7 +232,6 @@ Payload JSON for each row is stored in `payload_json` for round-tripping into a 
 ```sh
 ark --backup /path/to/MobileSync/Backup/<udid> --out ./staging messages
 ark --backup … voicemail|voicememos|contacts|wifi|whatsapp|all
-ark view --root ./staging
 ```
 
-Password: `--password-file`, `--password`, or interactive prompt.
+Password: `agent.yml` / env / `--password-file` / `--password` / prompt.
